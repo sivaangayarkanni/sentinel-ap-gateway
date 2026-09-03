@@ -1,111 +1,112 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>Sentinel-AP — Control Room</title>
-<style>
-:root{--bg:#070b14;--panel:#0e1624;--line:#1c2a44;--text:#e7eefc;--muted:#8aa0c2;--blue:#3e8eff;--green:#2bd97c;--red:#ff5470;--warn:#ffc857}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 Inter,system-ui,sans-serif}
-header{display:flex;justify-content:space-between;align-items:center;padding:16px 22px;border-bottom:1px solid var(--line)}
-.brand{font-weight:700;letter-spacing:.08em}.sub{color:var(--muted);font-size:12px}
-.pill{border:1px solid var(--line);border-radius:999px;padding:6px 10px;font-size:11px;color:var(--muted)}
-main{display:grid;gap:16px;padding:16px 22px;grid-template-columns:1fr 1fr}
-.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
-.full{grid-column:1/-1}
-label{display:block;color:var(--muted);font-size:11px;margin:8px 0 4px}
-input,select,button{width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:#0a1220;color:var(--text)}
-button{background:var(--blue);border:0;font-weight:600;cursor:pointer;margin-top:10px}
-button:disabled{opacity:.5;cursor:not-allowed}
-.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
-.stat{background:#0a1220;border:1px solid var(--line);border-radius:10px;padding:10px}
-.stat b{display:block;font-size:22px}
-.log,.queue{max-height:280px;overflow:auto;font-family:ui-monospace,monospace;font-size:12px}
-.row{padding:8px 0;border-bottom:1px solid var(--line)}
-.ok{color:var(--green)}.bad{color:var(--red)}.warn{color:var(--warn)}
-</style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sentinel-AP Gateway — Live Control Room</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<header>
-  <div><div class="brand">SENTINEL-AP</div><div class="sub">AI-agent transaction guardrail</div></div>
-  <div class="pill" id="ws">WS: connecting…</div>
-</header>
-<main>
-  <section class="panel">
-    <div class="sub">02 — AUTH + INTENT</div>
-    <form id="auth">
-      <label>Agent ID</label><input id="agent" placeholder="agent_alpha_09" required/>
-      <label>Client secret</label><input id="secret" type="password" required/>
-      <button>Get token</button>
-    </form>
-    <div class="sub" id="authStatus">Not authenticated</div>
-    <form id="intent">
-      <label>Amount INR</label><input id="amount" type="number" value="4500" required/>
-      <label>SKU</label><select id="sku"></select>
-      <label>Vendor</label><select id="vendor"></select>
-      <button id="send" disabled>Send intent</button>
-    </form>
-    <div id="banner" class="sub">Authenticate, then submit an intent.</div>
-  </section>
-  <section class="panel">
-    <div class="sub">03 — STATS + GATE 2</div>
-    <div class="stats">
-      <div class="stat"><b id="t">0</b>total</div>
-      <div class="stat"><b id="e">0</b>accepted</div>
-      <div class="stat"><b id="b">0</b>blocked</div>
-      <div class="stat"><b id="q">0</b>queued</div>
+<div class="scanlines"></div>
+<header class="topbar">
+  <div class="brand">
+    <svg class="brand-mark" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M20 3L34 9V19C34 27.5 28 34.5 20 37C12 34.5 6 27.5 6 19V9L20 3Z" stroke="url(#g1)" stroke-width="2.2" fill="rgba(62,142,255,0.08)"/>
+      <path d="M14 19.5L18 23.5L26.5 15" stroke="url(#g1)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+      <defs>
+        <linearGradient id="g1" x1="6" y1="3" x2="34" y2="37" gradientUnits="userSpaceOnUse">
+          <stop stop-color="#3E8EFF"/>
+          <stop offset="1" stop-color="#2BD97C"/>
+        </linearGradient>
+      </defs>
+    </svg>
+    <div class="brand-text">
+      <span class="brand-title">SENTINEL-AP</span>
+      <span class="brand-sub">GATEWAY // AI-AGENT TRANSACTION GUARDRAIL</span>
     </div>
-    <div class="sub" id="health" style="margin-top:10px">Waiting for first probe…</div>
+  </div>
+  <div class="topbar-right">
+    <div class="mode-pill" id="razorpayModePill"><span class="dot"></span> <span id="razorpayModeText">RAZORPAY —</span></div>
+    <div class="status-pill" id="wsStatusPill"><span class="pulse-dot"></span> <span id="wsStatusText">CONNECTING…</span></div>
+  </div>
+</header>
+<main class="layout">
+  <section class="pipeline-panel">
+    <div class="panel-label">
+      <span class="eyebrow">01 — LIVE TRANSACTION PIPELINE</span>
+      <span class="panel-hint">Every intent travels left → right through both real gates, pushed live over WebSocket.</span>
+    </div>
+    <div class="pipeline" id="pipeline">
+      <div class="pipeline-track">
+        <div class="checkpoint node-agent"><div class="node-icon">🤖</div><div class="node-label">AI AGENT</div><div class="node-sub">Raw Intent</div></div>
+        <div class="conveyor" id="conveyorA"><div class="conveyor-line"></div></div>
+        <div class="checkpoint node-gate" id="gate1Node">
+          <div class="gate-ring gate-ring--idle" id="gate1Ring"><span class="gate-icon">🟢</span></div>
+          <div class="node-label">GATE 1</div><div class="node-sub">Policy & Logic</div><div class="gate-state" id="gate1State">STANDBY</div>
+        </div>
+        <div class="conveyor" id="conveyorB"><div class="conveyor-line"></div></div>
+        <div class="checkpoint node-gate" id="gate2Node">
+          <div class="gate-ring gate-ring--idle" id="gate2Ring"><span class="gate-icon">🔵</span></div>
+          <div class="node-label">GATE 2</div><div class="node-sub">Network Health</div><div class="gate-state" id="gate2State">STANDBY</div>
+        </div>
+        <div class="conveyor" id="conveyorC"><div class="conveyor-line"></div></div>
+        <div class="checkpoint node-exec"><div class="node-icon">💳</div><div class="node-label">RAZORPAY</div><div class="node-sub" id="execSub">Awaiting intent</div></div>
+      </div>
+      <div class="chip-layer" id="chipLayer"></div>
+    </div>
+    <div class="outcome-banner" id="outcomeBanner">
+      <span id="outcomeText">Authenticate below, then submit a transaction intent to watch it move through the real gates.</span>
+    </div>
   </section>
-  <section class="panel"><div class="sub">04 — QUEUE</div><div class="queue" id="queue">Empty</div></section>
-  <section class="panel"><div class="sub">05 — LEDGER</div><div class="log" id="log">Waiting…</div></section>
+  <div class="grid-two">
+    <section class="panel control-panel">
+      <div class="panel-label">
+        <span class="eyebrow">02 — AGENT AUTHENTICATION</span>
+        <span class="panel-hint">Register an agent server-side first (see README), then exchange credentials here.</span>
+      </div>
+      <form id="authForm" class="intent-form">
+        <div class="field-row"><label>Agent ID</label><input type="text" id="f_cred_agent_id" placeholder="agent_alpha_09" required></div>
+        <div class="field-row"><label>Client Secret</label><input type="password" id="f_client_secret" placeholder="paste the secret from /v1/agents/register" required></div>
+        <button type="submit" class="btn-primary" id="authBtn"><span>Get Access Token</span></button>
+      </form>
+      <div class="network-status" id="authStatusBox"><span class="netstat-label">TOKEN STATUS:</span><span id="authStatusValue">Not authenticated</span></div>
+      <div class="scenario-presets"><span class="presets-label">SEND A TRANSACTION INTENT</span></div>
+      <form id="intentForm" class="intent-form">
+        <div class="field-row"><label>Amount (₹ INR)</label><input type="number" id="f_amount" value="4500" required></div>
+        <div class="field-row"><label>SKU</label><select id="f_sku"></select></div>
+        <div class="field-row"><label>Vendor ID</label><select id="f_vendor"></select></div>
+        <button type="submit" class="btn-primary" id="submitBtn" disabled><span>Send Intent to Sentinel-AP</span></button>
+      </form>
+    </section>
+    <section class="panel stats-panel">
+      <div class="panel-label"><span class="eyebrow">03 — GUARDRAIL STATS</span></div>
+      <div class="stats-grid">
+        <div class="stat-card stat-card--total"><span class="stat-value" id="statTotal">0</span><span class="stat-label">Total Intents</span></div>
+        <div class="stat-card stat-card--good"><span class="stat-value" id="statExecuted">0</span><span class="stat-label">Accepted</span></div>
+        <div class="stat-card stat-card--bad"><span class="stat-value" id="statBlocked">0</span><span class="stat-label">Blocked (Policy)</span></div>
+        <div class="stat-card stat-card--warn"><span class="stat-value" id="statQueued">0</span><span class="stat-label">Held in Queue</span></div>
+      </div>
+      <div class="protected-value"><span class="protected-label">VALUE PROTECTED FROM BAD SPEND</span><span class="protected-amount" id="statProtected">₹0</span></div>
+      <div class="protected-value protected-value--alt"><span class="protected-label">VALUE ACCEPTED ON RAIL</span><span class="protected-amount" id="statExecutedValue">₹0</span></div>
+      <div class="network-status" id="healthBox" style="margin-top:14px;"><span class="netstat-label">REAL GATE 2 TELEMETRY:</span><span id="healthValue">Waiting for first probe…</span></div>
+    </section>
+  </div>
+  <div class="grid-two">
+    <section class="panel queue-panel">
+      <div class="panel-label"><span class="eyebrow">04 — RETRY QUEUE (REDIS-BACKED)</span></div>
+      <div class="queue-list" id="queueList"><div class="empty-state">No transactions currently queued.</div></div>
+    </section>
+    <section class="panel log-panel">
+      <div class="panel-label"><span class="eyebrow">05 — LIVE DECISION LEDGER</span></div>
+      <div class="log-feed" id="logFeed"><div class="empty-state">Waiting for transaction activity…</div></div>
+    </section>
+  </div>
 </main>
-<script>
-let token=null, agentId=null, cfg=null;
-const $ = id => document.getElementById(id);
-function fill(sel, arr){ sel.innerHTML=(arr||[]).map(v=>`<option>${v}</option>`).join(''); }
-async function loadStats(){
-  const d = await (await fetch('/v1/dashboard/stats')).json();
-  cfg=d.config; fill($('sku'), cfg.sku_whitelist); fill($('vendor'), cfg.vendor_whitelist);
-  $('t').textContent=d.stats.total; $('e').textContent=d.stats.executed;
-  $('b').textContent=d.stats.blockedPolicy; $('q').textContent=d.stats.queued;
-  const h=d.health;
-  $('health').textContent = h.status==='MEASURED'
-    ? `success ${(h.successRate*100).toFixed(1)}% · ${Math.round(h.avgLatencyMs)}ms · n=${h.sampleSize}`
-    : 'No telemetry yet';
-}
-async function loadQueue(){
-  const d = await (await fetch('/v1/dashboard/queue')).json();
-  $('queue').innerHTML = (d.queue||[]).length ? d.queue.map(i=>`<div class="row">${i.intent_id} ₹${i.amount} · ${i.status} · try ${i.attempts}</div>`).join('') : 'Empty';
-}
-async function loadLogs(){
-  const d = await (await fetch('/v1/dashboard/logs?limit=40')).json();
-  $('log').innerHTML = (d.logs||[]).map(l=>`<div class="row">${l.ts||''} <b>${l.type}</b> ${l.intentId||''} ${l.message||''}</div>`).join('') || 'Waiting…';
-}
-function connectWs(){
-  const ws = new WebSocket((location.protocol==='https:'?'wss:':'ws:')+'//'+location.host+'/ws');
-  ws.onopen=()=>$('ws').textContent='WS: live';
-  ws.onclose=()=>{ $('ws').textContent='WS: reconnecting'; setTimeout(connectWs,1500); };
-  ws.onmessage=()=>{ loadStats(); loadQueue(); loadLogs(); };
-}
-$('auth').onsubmit=async ev=>{
-  ev.preventDefault();
-  const res=await fetch('/v1/auth/token',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({agent_id:$('agent').value.trim(),client_secret:$('secret').value})});
-  const d=await res.json();
-  if(!res.ok){ $('authStatus').textContent=d.error+': '+(d.message||''); return; }
-  token=d.access_token; agentId=$('agent').value.trim();
-  $('authStatus').textContent='Authenticated as '+agentId+' ('+d.expires_in+'s)';
-  $('send').disabled=false;
-};
-$('intent').onsubmit=async ev=>{
-  ev.preventDefault();
-  const intent={agent_id:agentId,intent_id:'int_'+Date.now().toString(36),amount:Number($('amount').value),currency:'INR',vendor_id:$('vendor').value,sku:$('sku').value,timestamp:new Date().toISOString()};
-  const res=await fetch('/v1/transaction/intent',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify(intent)});
-  const d=await res.json();
-  $('banner').textContent = d.status+' '+(d.razorpay_order_id||d.error||d.violation?.reason||d.queue?.reason||d.settlement_status||'');
-  loadStats(); loadQueue(); loadLogs();
-};
-loadStats(); loadQueue(); loadLogs(); connectWs();
-</script>
+<footer class="footer">
+  <span>Sentinel-AP Gateway</span><span class="footer-dot">•</span><span>POST /v1/transaction/intent</span>
+</footer>
+<script src="app.js"></script>
 </body>
 </html>
