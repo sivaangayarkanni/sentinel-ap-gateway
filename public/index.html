@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Sentinel-AP — Control Room</title>
+<style>
+:root{--bg:#070b14;--panel:#0e1624;--line:#1c2a44;--text:#e7eefc;--muted:#8aa0c2;--blue:#3e8eff;--green:#2bd97c;--red:#ff5470;--warn:#ffc857}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 Inter,system-ui,sans-serif}
+header{display:flex;justify-content:space-between;align-items:center;padding:16px 22px;border-bottom:1px solid var(--line)}
+.brand{font-weight:700;letter-spacing:.08em}.sub{color:var(--muted);font-size:12px}
+.pill{border:1px solid var(--line);border-radius:999px;padding:6px 10px;font-size:11px;color:var(--muted)}
+main{display:grid;gap:16px;padding:16px 22px;grid-template-columns:1fr 1fr}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+.full{grid-column:1/-1}
+label{display:block;color:var(--muted);font-size:11px;margin:8px 0 4px}
+input,select,button{width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:#0a1220;color:var(--text)}
+button{background:var(--blue);border:0;font-weight:600;cursor:pointer;margin-top:10px}
+button:disabled{opacity:.5;cursor:not-allowed}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.stat{background:#0a1220;border:1px solid var(--line);border-radius:10px;padding:10px}
+.stat b{display:block;font-size:22px}
+.log,.queue{max-height:280px;overflow:auto;font-family:ui-monospace,monospace;font-size:12px}
+.row{padding:8px 0;border-bottom:1px solid var(--line)}
+.ok{color:var(--green)}.bad{color:var(--red)}.warn{color:var(--warn)}
+</style>
+</head>
+<body>
+<header>
+  <div><div class="brand">SENTINEL-AP</div><div class="sub">AI-agent transaction guardrail</div></div>
+  <div class="pill" id="ws">WS: connecting…</div>
+</header>
+<main>
+  <section class="panel">
+    <div class="sub">02 — AUTH + INTENT</div>
+    <form id="auth">
+      <label>Agent ID</label><input id="agent" placeholder="agent_alpha_09" required/>
+      <label>Client secret</label><input id="secret" type="password" required/>
+      <button>Get token</button>
+    </form>
+    <div class="sub" id="authStatus">Not authenticated</div>
+    <form id="intent">
+      <label>Amount INR</label><input id="amount" type="number" value="4500" required/>
+      <label>SKU</label><select id="sku"></select>
+      <label>Vendor</label><select id="vendor"></select>
+      <button id="send" disabled>Send intent</button>
+    </form>
+    <div id="banner" class="sub">Authenticate, then submit an intent.</div>
+  </section>
+  <section class="panel">
+    <div class="sub">03 — STATS + GATE 2</div>
+    <div class="stats">
+      <div class="stat"><b id="t">0</b>total</div>
+      <div class="stat"><b id="e">0</b>accepted</div>
+      <div class="stat"><b id="b">0</b>blocked</div>
+      <div class="stat"><b id="q">0</b>queued</div>
+    </div>
+    <div class="sub" id="health" style="margin-top:10px">Waiting for first probe…</div>
+  </section>
+  <section class="panel"><div class="sub">04 — QUEUE</div><div class="queue" id="queue">Empty</div></section>
+  <section class="panel"><div class="sub">05 — LEDGER</div><div class="log" id="log">Waiting…</div></section>
+</main>
+<script>
+let token=null, agentId=null, cfg=null;
+const $ = id => document.getElementById(id);
+function fill(sel, arr){ sel.innerHTML=(arr||[]).map(v=>`<option>${v}</option>`).join(''); }
+async function loadStats(){
+  const d = await (await fetch('/v1/dashboard/stats')).json();
+  cfg=d.config; fill($('sku'), cfg.sku_whitelist); fill($('vendor'), cfg.vendor_whitelist);
+  $('t').textContent=d.stats.total; $('e').textContent=d.stats.executed;
+  $('b').textContent=d.stats.blockedPolicy; $('q').textContent=d.stats.queued;
+  const h=d.health;
+  $('health').textContent = h.status==='MEASURED'
+    ? `success ${(h.successRate*100).toFixed(1)}% · ${Math.round(h.avgLatencyMs)}ms · n=${h.sampleSize}`
+    : 'No telemetry yet';
+}
+async function loadQueue(){
+  const d = await (await fetch('/v1/dashboard/queue')).json();
+  $('queue').innerHTML = (d.queue||[]).length ? d.queue.map(i=>`<div class="row">${i.intent_id} ₹${i.amount} · ${i.status} · try ${i.attempts}</div>`).join('') : 'Empty';
+}
+async function loadLogs(){
+  const d = await (await fetch('/v1/dashboard/logs?limit=40')).json();
+  $('log').innerHTML = (d.logs||[]).map(l=>`<div class="row">${l.ts||''} <b>${l.type}</b> ${l.intentId||''} ${l.message||''}</div>`).join('') || 'Waiting…';
+}
+function connectWs(){
+  const ws = new WebSocket((location.protocol==='https:'?'wss:':'ws:')+'//'+location.host+'/ws');
+  ws.onopen=()=>$('ws').textContent='WS: live';
+  ws.onclose=()=>{ $('ws').textContent='WS: reconnecting'; setTimeout(connectWs,1500); };
+  ws.onmessage=()=>{ loadStats(); loadQueue(); loadLogs(); };
+}
+$('auth').onsubmit=async ev=>{
+  ev.preventDefault();
+  const res=await fetch('/v1/auth/token',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({agent_id:$('agent').value.trim(),client_secret:$('secret').value})});
+  const d=await res.json();
+  if(!res.ok){ $('authStatus').textContent=d.error+': '+(d.message||''); return; }
+  token=d.access_token; agentId=$('agent').value.trim();
+  $('authStatus').textContent='Authenticated as '+agentId+' ('+d.expires_in+'s)';
+  $('send').disabled=false;
+};
+$('intent').onsubmit=async ev=>{
+  ev.preventDefault();
+  const intent={agent_id:agentId,intent_id:'int_'+Date.now().toString(36),amount:Number($('amount').value),currency:'INR',vendor_id:$('vendor').value,sku:$('sku').value,timestamp:new Date().toISOString()};
+  const res=await fetch('/v1/transaction/intent',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify(intent)});
+  const d=await res.json();
+  $('banner').textContent = d.status+' '+(d.razorpay_order_id||d.error||d.violation?.reason||d.queue?.reason||d.settlement_status||'');
+  loadStats(); loadQueue(); loadLogs();
+};
+loadStats(); loadQueue(); loadLogs(); connectWs();
+</script>
+</body>
+</html>
